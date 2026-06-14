@@ -4,7 +4,7 @@ from torchvision import transforms
 from torchvision.datasets import ImageFolder
 from torch.utils.data import DataLoader
 
-def clean_and_resize_images(dataset_dir, target_size=(224, 224)):
+def clean_and_resize_images(dataset_dir, target_size):
     print(f"--- Nettoyage et redimensionnement du dataset ---")
     removed_count = 0
     resized_count = 0
