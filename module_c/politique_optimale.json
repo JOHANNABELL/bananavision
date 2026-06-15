@@ -1,0 +1,362 @@
+{
+  "_meta": {
+    "projet": "BananaVision — PHP Plantations du Haut-Penja",
+    "module": "Module C — MDP décisionnel v2",
+    "algorithme": "value_iteration",
+    "gamma": 0.95,
+    "N_STATES": 20,
+    "N_ACTIONS": 4,
+    "iterations": 356,
+    "V_mean_fcfa": -113.03,
+    "V_max_fcfa": 788.45,
+    "V_min_fcfa": -1600.0,
+    "actions": {
+      "0": "export_cat1",
+      "1": "local_cat2",
+      "2": "transformation",
+      "3": "suspend"
+    }
+  },
+  "etats": {
+    "0": {
+      "state_id": 0,
+      "group": "malade",
+      "confidence": "faible",
+      "alert": false,
+      "libelle_php": "Fruit malade (toute maturité) — confiance faible — sans alerte",
+      "action_optimale": "suspend",
+      "action_index": 3,
+      "V_star": -1600.0,
+      "Q_star": {
+        "export_cat1": -1770.0,
+        "local_cat2": -1700.0,
+        "transformation": -1615.0,
+        "suspend": -1600.0
+      },
+      "justification": "Fruit malade (toute maturité), confiance faible, alerte=non. Ambiguïté ou risque phytosanitaire — contrôle manuel requis. Sécurité pack-house PHP."
+    },
+    "1": {
+      "state_id": 1,
+      "group": "malade",
+      "confidence": "faible",
+      "alert": true,
+      "libelle_php": "Fruit malade (toute maturité) — confiance faible — ⚠ alerte",
+      "action_optimale": "suspend",
+      "action_index": 3,
+      "V_star": -1600.0,
+      "Q_star": {
+        "export_cat1": null,
+        "local_cat2": -1700.0,
+        "transformation": -1615.0,
+        "suspend": -1600.0
+      },
+      "justification": "Fruit malade (toute maturité), confiance faible, alerte=oui. Ambiguïté ou risque phytosanitaire — contrôle manuel requis. Sécurité pack-house PHP."
+    },
+    "2": {
+      "state_id": 2,
+      "group": "malade",
+      "confidence": "moyen",
+      "alert": false,
+      "libelle_php": "Fruit malade (toute maturité) — confiance moyen — sans alerte",
+      "action_optimale": "suspend",
+      "action_index": 3,
+      "V_star": -1600.0,
+      "Q_star": {
+        "export_cat1": -1770.0,
+        "local_cat2": -1700.0,
+        "transformation": -1615.0,
+        "suspend": -1600.0
+      },
+      "justification": "Fruit malade (toute maturité), confiance moyen, alerte=non. Ambiguïté ou risque phytosanitaire — contrôle manuel requis. Sécurité pack-house PHP."
+    },
+    "3": {
+      "state_id": 3,
+      "group": "malade",
+      "confidence": "moyen",
+      "alert": true,
+      "libelle_php": "Fruit malade (toute maturité) — confiance moyen — ⚠ alerte",
+      "action_optimale": "suspend",
+      "action_index": 3,
+      "V_star": -1600.0,
+      "Q_star": {
+        "export_cat1": null,
+        "local_cat2": -1700.0,
+        "transformation": -1615.0,
+        "suspend": -1600.0
+      },
+      "justification": "Fruit malade (toute maturité), confiance moyen, alerte=oui. Ambiguïté ou risque phytosanitaire — contrôle manuel requis. Sécurité pack-house PHP."
+    },
+    "4": {
+      "state_id": 4,
+      "group": "malade",
+      "confidence": "fort",
+      "alert": false,
+      "libelle_php": "Fruit malade (toute maturité) — confiance fort — sans alerte",
+      "action_optimale": "suspend",
+      "action_index": 3,
+      "V_star": -1600.0,
+      "Q_star": {
+        "export_cat1": -1770.0,
+        "local_cat2": -1700.0,
+        "transformation": -1615.0,
+        "suspend": -1600.0
+      },
+      "justification": "Fruit malade (toute maturité), confiance fort, alerte=non. Ambiguïté ou risque phytosanitaire — contrôle manuel requis. Sécurité pack-house PHP."
+    },
+    "5": {
+      "state_id": 5,
+      "group": "vert_sain",
+      "confidence": "faible",
+      "alert": true,
+      "libelle_php": "Fruit vert sain — Export — confiance faible — ⚠ alerte",
+      "action_optimale": "suspend",
+      "action_index": 3,
+      "V_star": 669.0259,
+      "Q_star": {
+        "export_cat1": 574.7083,
+        "local_cat2": 563.1083,
+        "transformation": 608.8083,
+        "suspend": 669.0259
+      },
+      "justification": "Fruit vert sain — Export, confiance faible, alerte=oui. Ambiguïté ou risque phytosanitaire — contrôle manuel requis. Sécurité pack-house PHP."
+    },
+    "6": {
+      "state_id": 6,
+      "group": "vert_sain",
+      "confidence": "moyen",
+      "alert": false,
+      "libelle_php": "Fruit vert sain — Export — confiance moyen — sans alerte",
+      "action_optimale": "export_cat1",
+      "action_index": 0,
+      "V_star": 681.5517,
+      "Q_star": {
+        "export_cat1": 681.5517,
+        "local_cat2": 629.1517,
+        "transformation": 655.2017,
+        "suspend": 669.0259
+      },
+      "justification": "Fruit vert sain — Export, confiance moyen, alerte=non. Fruit conforme UE 1333/2011 — conditionnement export. Revenu maximal PHP (+52.5 FCFA/fruit)."
+    },
+    "7": {
+      "state_id": 7,
+      "group": "vert_sain",
+      "confidence": "moyen",
+      "alert": true,
+      "libelle_php": "Fruit vert sain — Export — confiance moyen — ⚠ alerte",
+      "action_optimale": "suspend",
+      "action_index": 3,
+      "V_star": 669.0259,
+      "Q_star": {
+        "export_cat1": 636.7083,
+        "local_cat2": 597.9083,
+        "transformation": 630.5083,
+        "suspend": 669.0259
+      },
+      "justification": "Fruit vert sain — Export, confiance moyen, alerte=oui. Ambiguïté ou risque phytosanitaire — contrôle manuel requis. Sécurité pack-house PHP."
+    },
+    "8": {
+      "state_id": 8,
+      "group": "vert_sain",
+      "confidence": "fort",
+      "alert": false,
+      "libelle_php": "Fruit vert sain — Export — confiance fort — sans alerte",
+      "action_optimale": "export_cat1",
+      "action_index": 0,
+      "V_star": 788.4483,
+      "Q_star": {
+        "export_cat1": 788.4483,
+        "local_cat2": 729.2483,
+        "transformation": 752.0233,
+        "suspend": 669.0259
+      },
+      "justification": "Fruit vert sain — Export, confiance fort, alerte=non. Fruit conforme UE 1333/2011 — conditionnement export. Revenu maximal PHP (+52.5 FCFA/fruit)."
+    },
+    "9": {
+      "state_id": 9,
+      "group": "vert_sain",
+      "confidence": "fort",
+      "alert": true,
+      "libelle_php": "Fruit vert sain — Export — confiance fort — ⚠ alerte",
+      "action_optimale": "suspend",
+      "action_index": 3,
+      "V_star": 669.0259,
+      "Q_star": {
+        "export_cat1": 652.2083,
+        "local_cat2": 606.6083,
+        "transformation": 635.9333,
+        "suspend": 669.0259
+      },
+      "justification": "Fruit vert sain — Export, confiance fort, alerte=oui. Ambiguïté ou risque phytosanitaire — contrôle manuel requis. Sécurité pack-house PHP."
+    },
+    "10": {
+      "state_id": 10,
+      "group": "mure_sain",
+      "confidence": "faible",
+      "alert": true,
+      "libelle_php": "Fruit mûr sain — Marché local — confiance faible — ⚠ alerte",
+      "action_optimale": "suspend",
+      "action_index": 3,
+      "V_star": 291.667,
+      "Q_star": {
+        "export_cat1": 196.2623,
+        "local_cat2": 228.3123,
+        "transformation": 250.1623,
+        "suspend": 291.667
+      },
+      "justification": "Fruit mûr sain — Marché local, confiance faible, alerte=oui. Ambiguïté ou risque phytosanitaire — contrôle manuel requis. Sécurité pack-house PHP."
+    },
+    "11": {
+      "state_id": 11,
+      "group": "mure_sain",
+      "confidence": "moyen",
+      "alert": false,
+      "libelle_php": "Fruit mûr sain — Marché local — confiance moyen — sans alerte",
+      "action_optimale": "local_cat2",
+      "action_index": 1,
+      "V_star": 317.5215,
+      "Q_star": {
+        "export_cat1": 304.4465,
+        "local_cat2": 317.5215,
+        "transformation": 307.7965,
+        "suspend": 291.667
+      },
+      "justification": "Fruit mûr sain — Marché local, confiance moyen, alerte=non. Déclassement marché local Douala/Mungo. Décision économiquement optimale pour ce groupe."
+    },
+    "12": {
+      "state_id": 12,
+      "group": "mure_sain",
+      "confidence": "moyen",
+      "alert": true,
+      "libelle_php": "Fruit mûr sain — Marché local — confiance moyen — ⚠ alerte",
+      "action_optimale": "suspend",
+      "action_index": 3,
+      "V_star": 291.667,
+      "Q_star": {
+        "export_cat1": 251.6623,
+        "local_cat2": 271.0623,
+        "transformation": 271.8623,
+        "suspend": 291.667
+      },
+      "justification": "Fruit mûr sain — Marché local, confiance moyen, alerte=oui. Ambiguïté ou risque phytosanitaire — contrôle manuel requis. Sécurité pack-house PHP."
+    },
+    "13": {
+      "state_id": 13,
+      "group": "mure_sain",
+      "confidence": "fort",
+      "alert": false,
+      "libelle_php": "Fruit mûr sain — Marché local — confiance fort — sans alerte",
+      "action_optimale": "local_cat2",
+      "action_index": 1,
+      "V_star": 391.2284,
+      "Q_star": {
+        "export_cat1": 381.3159,
+        "local_cat2": 391.2284,
+        "transformation": 376.2409,
+        "suspend": 291.667
+      },
+      "justification": "Fruit mûr sain — Marché local, confiance fort, alerte=non. Déclassement marché local Douala/Mungo. Décision économiquement optimale pour ce groupe."
+    },
+    "14": {
+      "state_id": 14,
+      "group": "mure_sain",
+      "confidence": "fort",
+      "alert": true,
+      "libelle_php": "Fruit mûr sain — Marché local — confiance fort — ⚠ alerte",
+      "action_optimale": "suspend",
+      "action_index": 3,
+      "V_star": 291.667,
+      "Q_star": {
+        "export_cat1": 265.5123,
+        "local_cat2": 281.7498,
+        "transformation": 277.2873,
+        "suspend": 291.667
+      },
+      "justification": "Fruit mûr sain — Marché local, confiance fort, alerte=oui. Ambiguïté ou risque phytosanitaire — contrôle manuel requis. Sécurité pack-house PHP."
+    },
+    "15": {
+      "state_id": 15,
+      "group": "tropmure_sain",
+      "confidence": "faible",
+      "alert": false,
+      "libelle_php": "Fruit trop mûr sain — Transformation — confiance faible — sans alerte",
+      "action_optimale": "suspend",
+      "action_index": 3,
+      "V_star": 109.1089,
+      "Q_star": {
+        "export_cat1": -20.6893,
+        "local_cat2": 64.1507,
+        "transformation": 91.5407,
+        "suspend": 109.1089
+      },
+      "justification": "Fruit trop mûr sain — Transformation, confiance faible, alerte=non. Ambiguïté ou risque phytosanitaire — contrôle manuel requis. Sécurité pack-house PHP."
+    },
+    "16": {
+      "state_id": 16,
+      "group": "tropmure_sain",
+      "confidence": "faible",
+      "alert": true,
+      "libelle_php": "Fruit trop mûr sain — Transformation — confiance faible — ⚠ alerte",
+      "action_optimale": "suspend",
+      "action_index": 3,
+      "V_star": 109.1089,
+      "Q_star": {
+        "export_cat1": -39.2417,
+        "local_cat2": 43.4783,
+        "transformation": 79.0983,
+        "suspend": 109.1089
+      },
+      "justification": "Fruit trop mûr sain — Transformation, confiance faible, alerte=oui. Ambiguïté ou risque phytosanitaire — contrôle manuel requis. Sécurité pack-house PHP."
+    },
+    "17": {
+      "state_id": 17,
+      "group": "tropmure_sain",
+      "confidence": "moyen",
+      "alert": false,
+      "libelle_php": "Fruit trop mûr sain — Transformation — confiance moyen — sans alerte",
+      "action_optimale": "transformation",
+      "action_index": 2,
+      "V_star": 152.0929,
+      "Q_star": {
+        "export_cat1": 52.0829,
+        "local_cat2": 141.1629,
+        "transformation": 152.0929,
+        "suspend": 109.1089
+      },
+      "justification": "Fruit trop mûr sain — Transformation, confiance moyen, alerte=non. Valorisation industrielle farine/jus. Évite la perte totale (+13.5 FCFA/fruit)."
+    },
+    "18": {
+      "state_id": 18,
+      "group": "tropmure_sain",
+      "confidence": "moyen",
+      "alert": true,
+      "libelle_php": "Fruit trop mûr sain — Transformation — confiance moyen — ⚠ alerte",
+      "action_optimale": "suspend",
+      "action_index": 3,
+      "V_star": 109.1089,
+      "Q_star": {
+        "export_cat1": -4.2417,
+        "local_cat2": 82.7183,
+        "transformation": 101.8783,
+        "suspend": 109.1089
+      },
+      "justification": "Fruit trop mûr sain — Transformation, confiance moyen, alerte=oui. Ambiguïté ou risque phytosanitaire — contrôle manuel requis. Sécurité pack-house PHP."
+    },
+    "19": {
+      "state_id": 19,
+      "group": "tropmure_sain",
+      "confidence": "fort",
+      "alert": false,
+      "libelle_php": "Fruit trop mûr sain — Transformation — confiance fort — sans alerte",
+      "action_optimale": "transformation",
+      "action_index": 2,
+      "V_star": 199.062,
+      "Q_star": {
+        "export_cat1": 102.107,
+        "local_cat2": 192.247,
+        "transformation": 199.062,
+        "suspend": 109.1089
+      },
+      "justification": "Fruit trop mûr sain — Transformation, confiance fort, alerte=non. Valorisation industrielle farine/jus. Évite la perte totale (+13.5 FCFA/fruit)."
+    }
+  }
+}

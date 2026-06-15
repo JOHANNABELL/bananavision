@@ -8,7 +8,12 @@ import gradio as gr
 from PIL import Image
 import json
 import os
+import uuid
+from collections import Counter
 from datetime import datetime
+
+from module_c.mdp_engine import MDPEngine
+from module_c.state_builder import build_state
 
 # -------------------------------
 # Configuration
@@ -21,6 +26,8 @@ SCALER_PATH = "scaler.joblib"
 KMEANS_PATH = "kmeans_model.joblib"
 CLUSTER_INFO_PATH = "cluster_info.json"
 CORRECTIONS_FILE = "user_corrections.json"
+TRACE_FILE = "quality_trace.json"
+MDP_POLICY_PATH = "module_c/politique_optimale.json"
 
 MULTICLASS_CLASS_NAMES = [
     "mure_malade",
@@ -96,6 +103,7 @@ def load_cluster_info():
         if info is None:
             continue
         cluster_map[int(cluster_id)] = {
+            "label_key": label_key,
             "nom": info["nom"],
             "couleur": CLUSTER_COLORS.get(label_key, "#64748b"),
             "qualite": "export" if label_key == "vert_sain" else "rejetee",
@@ -173,6 +181,7 @@ multiclass_model = build_multiclass_model()
 feature_extractor = build_feature_extractor()
 scaler = joblib.load(SCALER_PATH)
 kmeans = joblib.load(KMEANS_PATH)
+mdp_engine = MDPEngine(MDP_POLICY_PATH)
 
 # -------------------------------
 # Prédiction
@@ -234,6 +243,7 @@ def predict_cluster(img_tensor):
     })
     return {
         "cluster_id": int(cluster_id),
+        "cluster_label_key": cluster_info.get("label_key"),
         "cluster_nom": cluster_info["nom"],
         "cluster_couleur": cluster_info["couleur"],
         "cluster_description": cluster_info["description"],
@@ -243,15 +253,39 @@ def predict_cluster(img_tensor):
     }
 
 
+def predict_mdp(pred):
+    state = build_state(pred)
+    action = mdp_engine.get_optimal_action(state["state_id"])
+    return {
+        "mdp_state_id": state["state_id"],
+        "mdp_group": state["group"],
+        "mdp_confidence": state["confidence"],
+        "mdp_alert": state["alert"],
+        "mdp_score_global": state["score_global"],
+        "mdp_state_label": state["libelle"],
+        "mdp_action": action["action"],
+        "mdp_action_code": action["code_action"],
+        "mdp_action_label": action["libelle"],
+        "mdp_action_index": action["action_index"],
+        "mdp_v_star": action["V_star"],
+        "mdp_q_star": action["Q_star"],
+        "mdp_justification": action["justification"],
+        "mdp_suspendre": action["suspendre"],
+    }
+
+
 def predict_pipeline(image):
     img_tensor = transform(image).unsqueeze(0).to(device)
     binary_pred = predict_binary(img_tensor)
 
     if binary_pred["decision_quality"] == "export":
         quality_display = "EXPORT"
-        return {
+        result = {
             "pipeline_steps": "Étape 1 : CNN binaire -> export. Arrêt du pipeline.",
             "final_label": "Vert sain",
+            "final_label_key": "vert_sain",
+            "cluster_id": None,
+            "cluster_label_key": "vert_sain",
             "cluster_nom": "Non utilisé",
             "cluster_couleur": "#22c55e",
             "cluster_description": "Le K-Means n'est pas appelé quand le filtre binaire confirme une banane exportable.",
@@ -268,6 +302,8 @@ def predict_pipeline(image):
             "sequence_summary": "CNN binaire : banane verte saine exportable. Aucun traitement complémentaire nécessaire.",
             "multiclass_probs": {"Vert sain": 1.0},
         }
+        result.update(predict_mdp(result))
+        return result
 
     multiclass_pred = predict_multiclass(img_tensor)
     cluster_pred = predict_cluster(img_tensor)
@@ -278,9 +314,12 @@ def predict_pipeline(image):
     decision_defaut = cluster_pred["cluster_defaut"] or multiclass_pred["multiclass_defaut"]
     defect_display = decision_defaut if decision_defaut else "Aucun défaut détecté"
 
-    return {
+    result = {
         "pipeline_steps": "Étape 1 : CNN binaire -> rejet. Étape 2 : CNN multiclasse. Étape 3 : K-Means -> réponse finale.",
         "final_label": cluster_pred["cluster_nom"],
+        "final_label_key": cluster_pred["cluster_label_key"] or multiclass_pred["multiclass_key"],
+        "cluster_id": cluster_pred["cluster_id"],
+        "cluster_label_key": cluster_pred["cluster_label_key"],
         "cluster_nom": cluster_pred["cluster_nom"],
         "cluster_couleur": cluster_pred["cluster_couleur"],
         "cluster_description": cluster_pred["cluster_description"],
@@ -297,6 +336,8 @@ def predict_pipeline(image):
         "sequence_summary": f"Réponse finale affinée par K-Means : {cluster_pred['cluster_nom']}.",
         "multiclass_probs": multiclass_pred["multiclass_probs"],
     }
+    result.update(predict_mdp(result))
+    return result
 
 # -------------------------------
 # Sauvegarde des corrections
@@ -321,19 +362,226 @@ def save_correction(image, predicted_quality, predicted_defect, user_feedback,
         json.dump(corrections, f, indent=2)
     return "Système mis à jour."
 
+
+def load_trace_entries():
+    if not os.path.exists(TRACE_FILE):
+        return []
+    try:
+        with open(TRACE_FILE, "r", encoding="utf-8") as f:
+            entries = json.load(f)
+        return entries if isinstance(entries, list) else []
+    except (json.JSONDecodeError, OSError):
+        return []
+
+
+def write_trace_entries(entries):
+    with open(TRACE_FILE, "w", encoding="utf-8") as f:
+        json.dump(entries, f, indent=2, ensure_ascii=False)
+
+
+def save_trace(pred, feedback=None, corrections=None, trace_id=None):
+    entries = load_trace_entries()
+    now = datetime.now().isoformat(timespec="seconds")
+
+    if trace_id:
+        for entry in entries:
+            if entry.get("trace_id") == trace_id:
+                entry["feedback"] = feedback or entry.get("feedback")
+                entry["feedback_timestamp"] = now
+                entry["corrections"] = corrections or entry.get("corrections")
+                write_trace_entries(entries)
+                return trace_id
+
+    trace_id = str(uuid.uuid4())
+    entry = {
+        "trace_id": trace_id,
+        "timestamp": now,
+        "decision_finale": pred["quality_display"],
+        "classe_finale": pred["final_label"],
+        "defaut": pred["defect_display"],
+        "prob_export": round(float(pred["prob_export"]), 6),
+        "prob_rejet": round(float(pred["prob_rejet"]), 6),
+        "classe_multiclasse": pred["multiclass_label"],
+        "cluster": pred["cluster_nom"],
+        "cluster_confiance": round(float(pred["cluster_confiance"]), 6),
+        "pipeline": pred["pipeline_steps"],
+        "mdp_state_id": pred.get("mdp_state_id"),
+        "mdp_state_label": pred.get("mdp_state_label"),
+        "mdp_action": pred.get("mdp_action"),
+        "mdp_action_label": pred.get("mdp_action_label"),
+        "mdp_justification": pred.get("mdp_justification"),
+        "mdp_v_star": pred.get("mdp_v_star"),
+        "mdp_suspendre": pred.get("mdp_suspendre"),
+        "feedback": feedback,
+        "feedback_timestamp": None,
+        "corrections": corrections,
+    }
+    entries.append(entry)
+    write_trace_entries(entries)
+    return trace_id
+
+
+def _pct(part, total):
+    return (100.0 * part / total) if total else 0.0
+
+
+def _distribution_html(title, counter, total):
+    if not counter:
+        return f"""
+        <div style="background:#ffffff; border:1px solid #e5e7eb; border-radius:8px; padding:16px;">
+            <h3 style="margin:0 0 10px 0; font-size:15px; color:#111827;">{title}</h3>
+            <p style="margin:0; color:#64748b; font-size:13px;">Aucune donnée disponible.</p>
+        </div>
+        """
+
+    rows = []
+    for label, count in counter.most_common():
+        percent = _pct(count, total)
+        rows.append(f"""
+        <div style="margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; font-size:13px; color:#374151; margin-bottom:4px;">
+                <span>{label}</span><strong>{count} ({percent:.1f}%)</strong>
+            </div>
+            <div style="height:8px; background:#e5e7eb; border-radius:999px; overflow:hidden;">
+                <div style="height:100%; width:{percent:.1f}%; background:#2563eb;"></div>
+            </div>
+        </div>
+        """)
+
+    return f"""
+    <div style="background:#ffffff; border:1px solid #e5e7eb; border-radius:8px; padding:16px;">
+        <h3 style="margin:0 0 12px 0; font-size:15px; color:#111827;">{title}</h3>
+        {''.join(rows)}
+    </div>
+    """
+
+
+def build_dashboard():
+    entries = load_trace_entries()
+    total = len(entries)
+    exports = sum(1 for e in entries if e.get("decision_finale") == "EXPORT")
+    rejects = sum(1 for e in entries if e.get("decision_finale") == "REJETÉE")
+    validations = sum(1 for e in entries if e.get("feedback") == "valid")
+    corrections = sum(1 for e in entries if e.get("feedback") == "invalid")
+    suspensions = sum(1 for e in entries if e.get("mdp_suspendre") is True)
+    v_values = [float(e["mdp_v_star"]) for e in entries if e.get("mdp_v_star") is not None]
+    v_mean = sum(v_values) / len(v_values) if v_values else 0.0
+    correction_rate = _pct(corrections, validations + corrections)
+    reject_rate = _pct(rejects, total)
+
+    if total == 0:
+        alert_label = "En attente"
+        alert_text = "Aucune analyse enregistrée pour le moment."
+        alert_color = "#64748b"
+    elif correction_rate >= 20:
+        alert_label = "Vigilance"
+        alert_text = "Le taux de corrections humaines est élevé."
+        alert_color = "#dc2626"
+    elif reject_rate >= 70:
+        alert_label = "Attention"
+        alert_text = "Le taux de rejet est élevé sur les dernières analyses."
+        alert_color = "#d97706"
+    else:
+        alert_label = "Stable"
+        alert_text = "Les indicateurs qualité sont cohérents pour la démo."
+        alert_color = "#16a34a"
+
+    kpi_html = f"""
+    <div style="font-family:system-ui, -apple-system, sans-serif;">
+        <div style="display:grid; grid-template-columns:repeat(6, minmax(130px, 1fr)); gap:12px; margin-bottom:14px;">
+            <div style="background:#ffffff; border:1px solid #e5e7eb; border-radius:8px; padding:14px;">
+                <p style="margin:0; color:#64748b; font-size:12px;">Images analysées</p>
+                <strong style="font-size:28px; color:#111827;">{total}</strong>
+            </div>
+            <div style="background:#ffffff; border:1px solid #e5e7eb; border-radius:8px; padding:14px;">
+                <p style="margin:0; color:#64748b; font-size:12px;">Taux export</p>
+                <strong style="font-size:28px; color:#16a34a;">{_pct(exports, total):.1f}%</strong>
+            </div>
+            <div style="background:#ffffff; border:1px solid #e5e7eb; border-radius:8px; padding:14px;">
+                <p style="margin:0; color:#64748b; font-size:12px;">Taux rejet</p>
+                <strong style="font-size:28px; color:#dc2626;">{reject_rate:.1f}%</strong>
+            </div>
+            <div style="background:#ffffff; border:1px solid #e5e7eb; border-radius:8px; padding:14px;">
+                <p style="margin:0; color:#64748b; font-size:12px;">Feedback humain</p>
+                <strong style="font-size:28px; color:#111827;">{validations + corrections}</strong>
+            </div>
+            <div style="background:#ffffff; border:1px solid #e5e7eb; border-radius:8px; padding:14px;">
+                <p style="margin:0; color:#64748b; font-size:12px;">Contrôles manuels MDP</p>
+                <strong style="font-size:28px; color:#b91c1c;">{suspensions}</strong>
+            </div>
+            <div style="background:#ffffff; border:1px solid {alert_color}; border-radius:8px; padding:14px;">
+                <p style="margin:0; color:#64748b; font-size:12px;">Statut qualité</p>
+                <strong style="font-size:22px; color:{alert_color};">{alert_label}</strong>
+                <p style="margin:4px 0 0 0; color:#64748b; font-size:12px;">{alert_text}</p>
+            </div>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(4, minmax(160px, 1fr)); gap:12px;">
+            <div style="background:#f8fafc; border:1px solid #e5e7eb; border-radius:8px; padding:12px;">
+                <span style="font-size:13px; color:#475569;">Validations</span>
+                <strong style="float:right; color:#16a34a;">{validations}</strong>
+            </div>
+            <div style="background:#f8fafc; border:1px solid #e5e7eb; border-radius:8px; padding:12px;">
+                <span style="font-size:13px; color:#475569;">Corrections</span>
+                <strong style="float:right; color:#dc2626;">{corrections}</strong>
+            </div>
+            <div style="background:#f8fafc; border:1px solid #e5e7eb; border-radius:8px; padding:12px;">
+                <span style="font-size:13px; color:#475569;">Taux correction</span>
+                <strong style="float:right; color:#111827;">{correction_rate:.1f}%</strong>
+            </div>
+            <div style="background:#f8fafc; border:1px solid #e5e7eb; border-radius:8px; padding:12px;">
+                <span style="font-size:13px; color:#475569;">V* moyen MDP</span>
+                <strong style="float:right; color:#111827;">{v_mean:.1f} FCFA</strong>
+            </div>
+        </div>
+    </div>
+    """
+
+    class_counter = Counter(e.get("classe_finale", "Non renseigné") for e in entries)
+    defect_counter = Counter(e.get("defaut", "Non renseigné") for e in entries)
+    action_counter = Counter(e.get("mdp_action", "Non renseigné") for e in entries)
+    distribution_html = f"""
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px;">
+        {_distribution_html("Distribution des classes finales", class_counter, total)}
+        {_distribution_html("Distribution des défauts", defect_counter, total)}
+        {_distribution_html("Distribution des actions MDP", action_counter, total)}
+    </div>
+    """
+
+    recent_rows = []
+    for entry in list(reversed(entries))[:20]:
+        recent_rows.append([
+            entry.get("timestamp", ""),
+            entry.get("decision_finale", ""),
+            entry.get("classe_finale", ""),
+            entry.get("defaut", ""),
+            f"{entry.get('prob_export', 0):.1%}",
+            entry.get("cluster", ""),
+            f"{entry.get('cluster_confiance', 0):.1%}",
+            entry.get("mdp_action") or "",
+            entry.get("mdp_state_id") if entry.get("mdp_state_id") is not None else "",
+            f"{entry.get('mdp_v_star', 0):.1f}" if entry.get("mdp_v_star") is not None else "",
+            entry.get("feedback") or "en attente",
+        ])
+
+    return kpi_html, distribution_html, recent_rows
+
 # -------------------------------
 # Interface Gradio Logic
 # -------------------------------
-def process_and_validate(image, feedback, correct_quality, correct_defect):
+def process_and_validate(image, feedback, correct_quality, correct_defect, trace_id):
     if image is None:
         default_html = """
         <div style='text-align: center; padding: 50px; color: #6b7280; border: 2px dashed #e5e7eb; border-radius: 12px;'>
             <p style='font-size: 16px;'>📸 En attente d'une image pour lancer l'analyse.</p>
         </div>
         """
-        return default_html, gr.update(visible=False)
+        return default_html, gr.update(visible=False), trace_id
 
     pred = predict_pipeline(image)
+    if feedback is None:
+        trace_id = save_trace(pred)
+    elif trace_id is None:
+        trace_id = save_trace(pred)
     conf_pct = int(pred['cluster_confiance'] * 100)
 
     # Construction des lignes de probabilité pour l'accordéon
@@ -369,6 +617,18 @@ def process_and_validate(image, feedback, correct_quality, correct_defect):
             <p style="margin: 8px 0 0 0; font-size: 13px; color: #64748b;">{pred['multiclass_description']}</p>
         </div>
 
+        <div style="background: #fff7ed; border-radius: 12px; padding: 18px; border: 1px solid #fed7aa; margin-bottom: 20px;">
+            <span style="font-size: 12px; font-weight: 800; color: #c2410c; text-transform: uppercase;">Module C - Décision MDP</span>
+            <h3 style="margin: 6px 0 6px 0; font-size: 18px; color: #111827;">{pred['mdp_action_label']}</h3>
+            <p style="margin: 0 0 8px 0; font-size: 13px; color: #475569;">État S{pred['mdp_state_id']} - {pred['mdp_state_label']}</p>
+            <p style="margin: 0; font-size: 13px; color: #7c2d12;">{pred['mdp_justification']}</p>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px;">
+                <span style="font-size:12px; background:#ffedd5; color:#9a3412; padding:5px 8px; border-radius:6px;">Score global {pred['mdp_score_global']:.1%}</span>
+                <span style="font-size:12px; background:#ffedd5; color:#9a3412; padding:5px 8px; border-radius:6px;">Confiance {pred['mdp_confidence']}</span>
+                <span style="font-size:12px; background:#ffedd5; color:#9a3412; padding:5px 8px; border-radius:6px;">V* {pred['mdp_v_star']:.1f} FCFA</span>
+            </div>
+        </div>
+
         <details style="border-top: 1px solid #e5e7eb; padding-top: 12px; cursor: pointer;">
             <summary style="font-size: 13px; color: #374151; font-weight: 600; list-style: none; display: flex; justify-content: space-between; align-items: center;">
                 <span>📊 Métriques Deep Learning complémentaires</span>
@@ -390,14 +650,24 @@ def process_and_validate(image, feedback, correct_quality, correct_defect):
 
     if feedback == "Valider":
         save_correction(image, pred['quality_display'], pred['defect_display'], "valid", "", "")
-        return html + "<div style='background:#f0fdf4; color:#16a34a; padding:12px; border-radius:8px; text-align:center; margin-top:12px; font-weight:600; border:1px solid #bbf7d0;'>✅ Décision validée avec succès.</div>", gr.update(visible=False)
+        save_trace(pred, feedback="valid", trace_id=trace_id)
+        return html + "<div style='background:#f0fdf4; color:#16a34a; padding:12px; border-radius:8px; text-align:center; margin-top:12px; font-weight:600; border:1px solid #bbf7d0;'>✅ Décision validée avec succès.</div>", gr.update(visible=False), trace_id
     elif feedback == "Invalider":
         if not correct_quality or (correct_quality == "export" and correct_defect != "Aucun"):
-            return html + "<div style='background:#fef2f2; color:#dc2626; padding:12px; border-radius:8px; text-align:center; margin-top:12px; font-weight:600; border:1px solid #fecaca;'>⚠️ Erreur de cohérence : une banane 'export' ne peut avoir de défaut.</div>", gr.update(visible=True)
+            return html + "<div style='background:#fef2f2; color:#dc2626; padding:12px; border-radius:8px; text-align:center; margin-top:12px; font-weight:600; border:1px solid #fecaca;'>⚠️ Erreur de cohérence : une banane 'export' ne peut avoir de défaut.</div>", gr.update(visible=True), trace_id
         save_correction(image, pred['quality_display'], pred['defect_display'], "invalid", correct_quality, correct_defect if correct_defect != "Aucun" else None)
-        return html + f"<div style='background:#eff6ff; color:#2563eb; padding:12px; border-radius:8px; text-align:center; margin-top:12px; font-weight:600; border:1px solid #bfdbfe;'>🔄 Correction enregistrée ! Re-classification forcée.</div>", gr.update(visible=False)
+        save_trace(
+            pred,
+            feedback="invalid",
+            corrections={
+                "correct_quality": correct_quality,
+                "correct_defect": correct_defect if correct_defect != "Aucun" else None,
+            },
+            trace_id=trace_id,
+        )
+        return html + f"<div style='background:#eff6ff; color:#2563eb; padding:12px; border-radius:8px; text-align:center; margin-top:12px; font-weight:600; border:1px solid #bfdbfe;'>🔄 Correction enregistrée ! Re-classification forcée.</div>", gr.update(visible=False), trace_id
     else:
-        return html, gr.update(visible=True)
+        return html, gr.update(visible=True), trace_id
 
 # -------------------------------
 # Construction de l'Interface Web
@@ -409,53 +679,82 @@ default_html_view = """
 </div>
 """
 
+dashboard_html, dashboard_dist_html, dashboard_rows = build_dashboard()
+
 # Correction Gradio 6.0 : Le paramètre CSS a été retiré de gr.Blocks()
 with gr.Blocks(title="BananaVision Enterprise") as demo:
-    
-    # Header minimaliste et pro
+    current_trace_id = gr.State(None)
+
     with gr.Row():
         gr.HTML("""
-        <div style="text-align: center; margin: 20px 0 10px 0;">
-            <h1 style="font-size: 28px; font-weight: 800; color: #1e293b; margin-bottom: 4px;">🍌 BananaVision Enterprise</h1>
-            <p style="font-size: 14px; color: #64748b; margin: 0;">Système d'évaluation de la qualité d'exportation par vision artificielle et clustering</p>
+        <div style="text-align: left; margin: 16px 0 10px 0;">
+            <h1 style="font-size: 28px; font-weight: 800; color: #1e293b; margin-bottom: 4px;">BananaVision Enterprise</h1>
+            <p style="font-size: 14px; color: #64748b; margin: 0;">Contrôle qualité séquentiel et traçabilité quasi temps réel pour le tri export.</p>
         </div>
         """)
 
-    # Grid principale divisée proprement en 2 colonnes parfaitement symétriques
-    with gr.Row(equal_height=True):
-        
-        # Colonne de Gauche : Input
-        with gr.Column(scale=1):
-            image_input = gr.Image(type="pil", label="Flux Caméra / Image Source", elem_id="img_input")
-            analyze_btn = gr.Button("🔍 Lancer le Diagnostic", variant="primary", size="lg")
-        
-        # Colonne de Droite : Output
-        with gr.Column(scale=1):
-            output_html = gr.HTML(value=default_html_view, label="Résultat de l'analyse")
-            
-            # Correction : Remplacement de gr.Box par gr.Group (mieux adapté et compatible Gradio 6)
-            with gr.Group(visible=False) as feedback_row:
-                gr.HTML("<div style='padding: 10px 0;'><p style='font-size:13px; font-weight:700; color:#475569; margin: 0 0 10px 0;'>🛠️ Supervision humaine – Confirmer la décision du système ?</p></div>")
-                feedback_choice = gr.Radio(choices=["Valider", "Invalider"], label=None, show_label=False)
-                
-                with gr.Group() as correction_box:
-                    gr.HTML("<p style='font-size:12px; font-weight:600; color:#64748b; margin: 10px 0 5px 0;'>Si invalide, spécifier les valeurs réelles :</p>")
-                    correct_quality = gr.Radio(choices=["export", "rejetee"], label="Qualité Terrain")
-                    correct_defect = gr.Radio(choices=["Aucun", "defaut_mecanique", "maladie_fongique", "mure"], label="Type de Défaut constaté")
-                
-                submit_feedback_btn = gr.Button("Enregistrer le Feedback", variant="secondary", size="sm")
+    with gr.Tabs():
+        with gr.Tab("Diagnostic"):
+            with gr.Row(equal_height=True):
+                with gr.Column(scale=1, min_width=320):
+                    image_input = gr.Image(type="pil", label="Flux caméra / Image source", elem_id="img_input")
+                    analyze_btn = gr.Button("Lancer le diagnostic", variant="primary", size="lg")
 
-    # Événements
+                with gr.Column(scale=1, min_width=420):
+                    output_html = gr.HTML(value=default_html_view, label="Résultat de l'analyse")
+
+                    with gr.Group(visible=False) as feedback_row:
+                        gr.HTML("<div style='padding: 10px 0;'><p style='font-size:13px; font-weight:700; color:#475569; margin: 0 0 10px 0;'>Supervision humaine - Confirmer la décision du système ?</p></div>")
+                        feedback_choice = gr.Radio(choices=["Valider", "Invalider"], label=None, show_label=False)
+
+                        with gr.Group() as correction_box:
+                            gr.HTML("<p style='font-size:12px; font-weight:600; color:#64748b; margin: 10px 0 5px 0;'>Si invalide, spécifier les valeurs réelles :</p>")
+                            correct_quality = gr.Radio(choices=["export", "rejetee"], label="Qualité terrain")
+                            correct_defect = gr.Radio(choices=["Aucun", "defaut_mecanique", "maladie_fongique", "maturite_non_export", "surmaturite"], label="Type de défaut constaté")
+
+                        submit_feedback_btn = gr.Button("Enregistrer le feedback", variant="secondary", size="sm")
+
+        with gr.Tab("Dashboard Qualité"):
+            with gr.Row():
+                refresh_dashboard_btn = gr.Button("Rafraîchir dashboard", variant="primary")
+            dashboard_kpis = gr.HTML(value=dashboard_html)
+            dashboard_distributions = gr.HTML(value=dashboard_dist_html)
+            dashboard_table = gr.Dataframe(
+                headers=[
+                    "Horodatage",
+                    "Décision",
+                    "Classe finale",
+                    "Défaut",
+                    "P(export)",
+                    "Cluster",
+                    "Conf. cluster",
+                    "Action MDP",
+                    "État MDP",
+                    "V* FCFA",
+                    "Feedback",
+                ],
+                value=dashboard_rows,
+                interactive=False,
+                wrap=True,
+                label="Dernières analyses",
+            )
+
     analyze_btn.click(
         fn=process_and_validate,
-        inputs=[image_input, gr.State(None), gr.State(None), gr.State(None)],
-        outputs=[output_html, feedback_row]
+        inputs=[image_input, gr.State(None), gr.State(None), gr.State(None), current_trace_id],
+        outputs=[output_html, feedback_row, current_trace_id]
     )
-    
+
     submit_feedback_btn.click(
         fn=process_and_validate,
-        inputs=[image_input, feedback_choice, correct_quality, correct_defect],
-        outputs=[output_html, feedback_row]
+        inputs=[image_input, feedback_choice, correct_quality, correct_defect, current_trace_id],
+        outputs=[output_html, feedback_row, current_trace_id]
+    )
+
+    refresh_dashboard_btn.click(
+        fn=build_dashboard,
+        inputs=[],
+        outputs=[dashboard_kpis, dashboard_distributions, dashboard_table]
     )
 
 if __name__ == "__main__":

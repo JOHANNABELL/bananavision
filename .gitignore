@@ -16,3 +16,7 @@ __pycache__/
 Thumbs.db
 content/*
 !content/requirements.txt
+quality_trace.json
+quality_trace_test.json
+gradio_app.log
+gradio_app.err.log
