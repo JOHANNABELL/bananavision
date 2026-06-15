@@ -1,0 +1,93 @@
+{
+  "source": "train_kmeans_refiner.py",
+  "weights": "outputs/module_a/best_efficientnet_b0_multiclass.pth",
+  "data_dir": "dataset/multiclass/train",
+  "class_names": [
+    "mure_malade",
+    "mure_saint",
+    "tropmure_malade",
+    "tropmure_saint",
+    "vert_malade",
+    "vert_sain"
+  ],
+  "cluster_to_label": {
+    "3": "mure_malade",
+    "0": "tropmure_saint",
+    "5": "mure_saint",
+    "4": "mure_malade",
+    "1": "vert_malade",
+    "2": "vert_sain"
+  },
+  "cluster_stats": {
+    "3": {
+      "dominant_label": "mure_malade",
+      "purity": 0.9603174603174603,
+      "count": 378,
+      "counts": {
+        "mure_malade": 363,
+        "tropmure_malade": 14,
+        "vert_sain": 1
+      }
+    },
+    "0": {
+      "dominant_label": "tropmure_saint",
+      "purity": 0.9270152505446623,
+      "count": 918,
+      "counts": {
+        "mure_malade": 11,
+        "mure_saint": 1,
+        "tropmure_malade": 13,
+        "tropmure_saint": 851,
+        "vert_malade": 40,
+        "vert_sain": 2
+      }
+    },
+    "5": {
+      "dominant_label": "mure_saint",
+      "purity": 0.5052015604681405,
+      "count": 1538,
+      "counts": {
+        "mure_malade": 1,
+        "mure_saint": 777,
+        "tropmure_malade": 752,
+        "tropmure_saint": 5,
+        "vert_malade": 3
+      }
+    },
+    "4": {
+      "dominant_label": "mure_malade",
+      "purity": 0.9978354978354979,
+      "count": 462,
+      "counts": {
+        "mure_malade": 461,
+        "tropmure_malade": 1
+      }
+    },
+    "1": {
+      "dominant_label": "vert_malade",
+      "purity": 0.8079545454545455,
+      "count": 880,
+      "counts": {
+        "mure_malade": 4,
+        "tropmure_malade": 90,
+        "tropmure_saint": 3,
+        "vert_malade": 711,
+        "vert_sain": 72
+      }
+    },
+    "2": {
+      "dominant_label": "vert_sain",
+      "purity": 0.8369098712446352,
+      "count": 932,
+      "counts": {
+        "mure_saint": 44,
+        "tropmure_malade": 6,
+        "tropmure_saint": 1,
+        "vert_malade": 101,
+        "vert_sain": 780
+      }
+    }
+  },
+  "silhouette": 0.026518067345023155,
+  "adjusted_rand_index": 0.6417788483294514
+}

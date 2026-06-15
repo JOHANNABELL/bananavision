@@ -218,8 +218,9 @@ def predict_multiclass(img_tensor):
 def predict_cluster(img_tensor):
     with torch.no_grad():
         embedding = feature_extractor(img_tensor).cpu().numpy().reshape(1, -1)
-    embedding = embedding.astype(np.float64)
+    embedding = embedding.astype(np.float32)
     embedding_scaled = scaler.transform(embedding)
+    embedding_scaled = embedding_scaled.astype(kmeans.cluster_centers_.dtype, copy=False)
     cluster_id = kmeans.predict(embedding_scaled)[0]
     centroid = kmeans.cluster_centers_[cluster_id]
     dist = np.linalg.norm(embedding_scaled - centroid)
