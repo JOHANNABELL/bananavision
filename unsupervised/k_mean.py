@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_score
+from sklearn.metrics import silhouette_score, silhouette_samples
 
 def k_mean():
     df = pd.read_csv("../../DL/embeddings_train.csv")
@@ -42,8 +42,18 @@ def k_mean():
     plt.savefig("optimal_k_coude_silhouette.png", dpi=150)
     plt.show()
 
-    best_k_silhouette = K_range[np.argmax(silhouettes)]
-    print(f"Meilleur k selon les differents score est: {best_k_silhouette}")
+    best_k = K_range[np.argmax(silhouettes)]
+    print(f"Meilleur k selon le score de silhouette : {best_k}")
+
+    km_best = KMeans(n_clusters=best_k, random_state=42, n_init=10)
+    labels_best = km_best.fit_predict(X_scaled)
+
+    sil_vals = silhouette_samples(X_scaled, labels_best)
+
+    df['silhouette_score'] = sil_vals
+
+    df.to_csv("embeddings_with_silhouette.csv", index=False)
+    print(f"CSV sauvegardé : embeddings_with_silhouette.csv (k={best_k})")
 
 if __name__ == '__main__':
     k_mean()

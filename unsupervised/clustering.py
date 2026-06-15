@@ -5,7 +5,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from sklearn.metrics import adjusted_rand_score
-
+import joblib
 
 def clustering():
     df = pd.read_csv("../../DL/embeddings_train.csv")
@@ -16,7 +16,7 @@ def clustering():
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
 
-    k_optimal = 6  # <--k_mean optimal a mettre
+    k_optimal = 6
     kmeans = KMeans(n_clusters=k_optimal, random_state=42, n_init=10)
     clusters = kmeans.fit_predict(X_scaled)
 
@@ -40,9 +40,7 @@ def clustering():
         compo = df[df['cluster_id'] == c]['label'].value_counts(normalize=True)
         print(compo.to_string())
 
-
     cm = pd.crosstab(df['label'], df['cluster_id'])
-
     plt.figure(figsize=(10, 6))
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
                 xticklabels=[f'Cluster {i}' for i in cm.columns],
@@ -60,6 +58,21 @@ def clustering():
 
     df.to_csv("embeddings_with_clusters.csv", index=False)
     print("Données enrichies sauvegardées dans 'embeddings_with_clusters.csv'")
+
+    joblib.dump(scaler, "scaler.joblib")
+    joblib.dump(kmeans, "kmeans_model.joblib")
+    print("Modèle de clustering et scaler sauvegardés (scaler.joblib, kmeans_model.joblib)")
+
+    return scaler, kmeans
+
+
+def predict_cluster(embedding_vector):
+    scaler = joblib.load("scaler.joblib")
+    kmeans = joblib.load("kmeans_model.joblib")
+
+    scaled = scaler.transform([embedding_vector])
+    cluster_id = kmeans.predict(scaled)[0]
+    return cluster_id
 
 
 if __name__ == '__main__':
