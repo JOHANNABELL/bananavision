@@ -29,7 +29,7 @@ from state_builder import (
 ECONOMIC = {
     # ── Revenus nets par kg (FCFA) ──────────────────────────────────────────
     # Source : FAO Banana Market Review 2023 × taux BCEAO 655.957 FCFA/EUR
-    "PRIX_EXPORT_KG":  350,   # 0.534 EUR/kg CAF Cavendish premium (FAO 2023)
+    "PRIX_EXPORT_KG":  400,   # 0.534 EUR/kg CAF Cavendish premium (FAO 2023)
     "PRIX_LOCAL_KG":   180,   # Marché grossiste Douala/Mungo (MINADER Déc. 2022)
     "PRIX_TRANSFO_KG":  90,   # Farine/jus — note PHP valorisation sous-produits 2023
 
@@ -39,8 +39,8 @@ ECONOMIC = {
 
     # ── Coûts métier (FCFA par fruit) ───────────────────────────────────────
     # Source : PHP note charges opérationnelles pack-house 2023
-    "COUT_CONTROLE":          30,   # immobilisation tapis + temps opérateur (~45s)
-    "COUT_PERTE_FRUIT":       55,   # fruit jeté ou invendu (valeur marchande perdue)
+    "COUT_CONTROLE":          80,   # immobilisation tapis + temps opérateur (~45s)
+    "COUT_PERTE_FRUIT":       100,   # fruit jeté ou invendu (valeur marchande perdue)
     "COUT_REJET_EXPORT":     250,   # rejet douanier/retour conteneur
                                     # (3 rejets × 3M FCFA / 120 000 fruits = 75 FCFA
                                     #  + perte réputation × 3.3 = 250 FCFA estimé)
@@ -97,7 +97,7 @@ R_BASE: dict[str, dict[str, float]] = {
         "export_cat1":   +G_EXPORT,                         # +52.5
         "local_cat2":    +G_LOCAL  - (G_EXPORT - G_LOCAL),  # +1.5  (manque à gagner)
         "transformation":+G_TRANSFO,                        # +13.5
-        "suspend":       -C_CTRL,                           # −30
+        "suspend":       -80,                           # −30
     },
     "mure_sain": {
         "export_cat1":   +G_LOCAL,                          # +27 (risque rejet, pas plein G_EXPORT)
@@ -114,14 +114,14 @@ R_BASE: dict[str, dict[str, float]] = {
     "malade": {
         "export_cat1":   -C_REJET,                          # −250 (rejet douanier)
         "local_cat2":    -C_MALADE,                         # −180 (risque phytosanitaire)
-        "transformation":-5,                                # −5  (CORRIGÉ : coût faible, non +5)
+        "transformation":-95,                                # −5  (CORRIGÉ : coût faible, non +5)
         "suspend":       -C_CTRL,                           # −30 (mais réduit via masque)
     },
 }
 
 # Étape B : probabilité d'erreur de classification
-P_ERR_BASE   = {"fort": 0.05, "moyen": 0.15, "faible": 0.30}
-ALERT_BONUS  = 0.10   # surcroît de risque si alerte=1
+P_ERR_BASE   = {"fort": 0.05, "moyen": 0.10, "faible": 0.30}
+ALERT_BONUS  = 0.10  # surcroît de risque si alerte=1
 
 def p_err(conf: str, alert: int) -> float:
     """
