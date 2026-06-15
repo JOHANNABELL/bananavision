@@ -1,4 +1,5 @@
 import argparse
+import csv
 import json
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -70,6 +71,48 @@ def extract_embeddings(dataset_dir, weights_path, batch_size, device):
     return np.vstack(embeddings), np.array(labels), dataset.classes
 
 
+def load_embeddings_csv(csv_path, split="train"):
+    csv_path = Path(csv_path)
+    with csv_path.open("r", newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        if not reader.fieldnames:
+            raise ValueError(f"CSV embeddings vide : {csv_path}")
+
+        feature_cols = [
+            name
+            for name in reader.fieldnames
+            if name.startswith("feat_") and name[5:].isdigit()
+        ]
+        feature_cols.sort(key=lambda name: int(name[5:]))
+        required = {"split", "label", "label_id"}
+        missing = required.difference(reader.fieldnames)
+        if missing:
+            raise ValueError(f"Colonnes manquantes dans {csv_path}: {sorted(missing)}")
+        if not feature_cols:
+            raise ValueError(f"Aucune colonne feat_* trouvée dans {csv_path}")
+
+        embeddings = []
+        labels = []
+        label_names_by_id = {}
+        for row in reader:
+            if split and row["split"] != split:
+                continue
+            label_id = int(row["label_id"])
+            label_names_by_id[label_id] = row["label"]
+            labels.append(label_id)
+            embeddings.append([float(row[col]) for col in feature_cols])
+
+    if not embeddings:
+        split_msg = f" pour split={split}" if split else ""
+        raise ValueError(f"Aucun embedding trouvé dans {csv_path}{split_msg}")
+
+    class_names = [
+        label_names_by_id[idx]
+        for idx in sorted(label_names_by_id)
+    ]
+    return np.asarray(embeddings, dtype=np.float32), np.asarray(labels), class_names
+
+
 def build_cluster_metadata(cluster_ids, labels, class_names):
     votes = defaultdict(list)
     for cluster_id, label_id in zip(cluster_ids, labels):
@@ -100,6 +143,12 @@ def parse_args():
     parser.add_argument("--scaler_out", default="scaler.joblib")
     parser.add_argument("--kmeans_out", default="kmeans_model.joblib")
     parser.add_argument("--metadata_out", default="cluster_info.json")
+    parser.add_argument("--embeddings_csv", default="embeddings/embeddings_multiclass.csv")
+    parser.add_argument(
+        "--embedding_split",
+        default="train",
+        help="Split du CSV embeddings utilisé pour entraîner K-Means. Utiliser vide pour tous.",
+    )
     return parser.parse_args()
 
 
@@ -108,12 +157,21 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[Device] {device}")
 
-    embeddings, labels, class_names = extract_embeddings(
-        args.data_dir,
-        args.weights,
-        args.batch_size,
-        device,
-    )
+    embeddings_csv = Path(args.embeddings_csv)
+    embedding_split = args.embedding_split or None
+    if embeddings_csv.exists():
+        embeddings, labels, class_names = load_embeddings_csv(embeddings_csv, embedding_split)
+        source = f"csv:{embeddings_csv}"
+        print(f"[Embeddings] Chargés depuis {embeddings_csv} split={embedding_split or 'all'}")
+    else:
+        embeddings, labels, class_names = extract_embeddings(
+            args.data_dir,
+            args.weights,
+            args.batch_size,
+            device,
+        )
+        source = "recomputed"
+        print("[Embeddings] CSV absent, recalcul depuis les images.")
     print(f"[Embeddings] {embeddings.shape[0]} images x {embeddings.shape[1]} features")
     print(f"[Classes] {class_names}")
 
@@ -130,6 +188,8 @@ def main():
     joblib.dump(kmeans, args.kmeans_out)
     metadata = {
         "source": "train_kmeans_refiner.py",
+        "embedding_source": source,
+        "embedding_split": embedding_split,
         "weights": args.weights,
         "data_dir": args.data_dir,
         "class_names": class_names,

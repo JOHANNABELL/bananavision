@@ -1,4 +1,5 @@
 import argparse
+import csv
 import json
 import time
 from pathlib import Path
@@ -19,7 +20,7 @@ from sklearn.metrics import (
     roc_curve,
 )
 from torchvision import datasets, models, transforms
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 
 
 IMG_SIZE = 224
@@ -379,6 +380,128 @@ def compute_inference_time(model, device, runs=100):
     return mean_ms
 
 
+class BackboneEmbeddingExtractor(nn.Module):
+    def __init__(self, model, architecture):
+        super().__init__()
+        self.features = model.features
+        if architecture == "efficientnet_b0":
+            self.pool = model.avgpool
+        elif architecture == "mobilenet_v2":
+            self.pool = nn.AdaptiveAvgPool2d((1, 1))
+        else:
+            raise ValueError(f"Architecture inconnue pour embeddings : {architecture}")
+
+    def forward(self, x):
+        x = self.features(x)
+        x = self.pool(x)
+        return torch.flatten(x, 1)
+
+
+def get_split_dirs(data_dir, task):
+    data_dir = Path(data_dir)
+    val_name = "val" if task == "binary" else "valid"
+    return {
+        "train": data_dir / "train",
+        "val": data_dir / val_name,
+        "test": data_dir / "test",
+    }
+
+
+def export_embeddings(
+    model,
+    architecture,
+    data_dir,
+    task,
+    class_names,
+    embeddings_dir,
+    batch_size,
+    num_workers,
+    device,
+    max_images=None,
+):
+    split_dirs = get_split_dirs(data_dir, task)
+    embeddings_dir = Path(embeddings_dir)
+    embeddings_dir.mkdir(parents=True, exist_ok=True)
+
+    output_stem = f"embeddings_{task}"
+    csv_path = embeddings_dir / f"{output_stem}.csv"
+    npy_path = embeddings_dir / f"{output_stem}.npy"
+
+    extractor = BackboneEmbeddingExtractor(model, architecture).to(device)
+    extractor.eval()
+
+    all_embeddings = []
+    metadata_rows = []
+    feature_dim = None
+
+    print(f"\n[Embeddings] Extraction officielle Module A2 -> {embeddings_dir}")
+    with torch.no_grad():
+        for split_name, split_path in split_dirs.items():
+            if not split_path.exists():
+                raise FileNotFoundError(f"Dossier {split_name} introuvable : {split_path}")
+
+            dataset = datasets.ImageFolder(split_path, transform=get_transforms("val"))
+            if dataset.classes != class_names:
+                raise ValueError(
+                    f"Classes incohérentes pour {split_name}: {dataset.classes} != {class_names}"
+                )
+
+            indices = list(range(len(dataset)))
+            if max_images is not None:
+                indices = indices[: max(0, max_images)]
+
+            subset = Subset(dataset, indices)
+            loader = DataLoader(
+                subset,
+                batch_size=batch_size,
+                shuffle=False,
+                num_workers=num_workers,
+            )
+            selected_samples = [dataset.samples[i] for i in indices]
+            cursor = 0
+
+            for images, labels in loader:
+                images = images.to(device)
+                batch_embeddings = extractor(images).cpu().numpy().astype(np.float32)
+                if feature_dim is None:
+                    feature_dim = batch_embeddings.shape[1]
+                all_embeddings.append(batch_embeddings)
+
+                batch_samples = selected_samples[cursor : cursor + len(labels)]
+                cursor += len(labels)
+                for (image_path, _), label_id in zip(batch_samples, labels.numpy().tolist()):
+                    metadata_rows.append(
+                        [
+                            split_name,
+                            str(Path(image_path)),
+                            class_names[int(label_id)],
+                            int(label_id),
+                        ]
+                    )
+
+            print(f"[Embeddings] {split_name}: {len(indices)} images")
+
+    if not all_embeddings:
+        raise ValueError("Aucun embedding généré : dataset vide ou --max_images=0.")
+
+    embeddings = np.vstack(all_embeddings).astype(np.float32)
+    np.save(npy_path, embeddings)
+
+    header = ["split", "path", "label", "label_id"] + [
+        f"feat_{idx}" for idx in range(embeddings.shape[1])
+    ]
+    with csv_path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(header)
+        for row, feature_vector in zip(metadata_rows, embeddings):
+            writer.writerow(row + feature_vector.tolist())
+
+    print(f"[Embeddings] Dimension={feature_dim}")
+    print(f"[Embeddings] CSV : {csv_path}")
+    print(f"[Embeddings] NPY : {npy_path}")
+    return csv_path, npy_path
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="BananaVision Module A2 CNN")
     parser.add_argument("--task", choices=["binary", "multiclass"], required=True)
@@ -390,6 +513,14 @@ def parse_args():
     parser.add_argument("--epochs_phase2", type=int, default=10)
     parser.add_argument("--patience", type=int, default=5)
     parser.add_argument("--output_dir", default="outputs/module_a")
+    parser.add_argument("--export_embeddings", action="store_true")
+    parser.add_argument("--embeddings_dir", default="embeddings")
+    parser.add_argument(
+        "--max_images",
+        type=int,
+        default=None,
+        help="Limite par split pour tester rapidement l'extraction d'embeddings.",
+    )
     return parser.parse_args()
 
 
@@ -415,6 +546,19 @@ def main():
     test_metrics = evaluate(model, loaders["test"], criterion, device, args.task)
     save_reports(test_metrics, class_names, args)
     compute_inference_time(model, device)
+    if args.export_embeddings:
+        export_embeddings(
+            model=model,
+            architecture=args.arch,
+            data_dir=args.data_dir,
+            task=args.task,
+            class_names=class_names,
+            embeddings_dir=args.embeddings_dir,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers,
+            device=device,
+            max_images=args.max_images,
+        )
 
 
 if __name__ == "__main__":

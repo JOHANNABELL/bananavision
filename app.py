@@ -11,6 +11,7 @@ import os
 import uuid
 from collections import Counter
 from datetime import datetime
+from pathlib import Path
 
 from module_c.mdp_engine import MDPEngine
 from module_c.state_builder import build_state
@@ -28,6 +29,7 @@ CLUSTER_INFO_PATH = "cluster_info.json"
 CORRECTIONS_FILE = "user_corrections.json"
 TRACE_FILE = "quality_trace.json"
 MDP_POLICY_PATH = "module_c/politique_optimale.json"
+MODULE_D_MD_PATH = "docs/module_d_ethique.md"
 
 MULTICLASS_CLASS_NAMES = [
     "mure_malade",
@@ -488,6 +490,13 @@ def build_dashboard():
 
     kpi_html = f"""
     <div style="font-family:system-ui, -apple-system, sans-serif;">
+        <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:14px; margin-bottom:14px;">
+            <strong style="font-size:14px; color:#1e293b;">Gouvernance et traçabilité - Module D</strong>
+            <p style="margin:6px 0 0 0; color:#64748b; font-size:13px;">
+                Ce dashboard matérialise le suivi éthique demandé dans le Module D :
+                journal des décisions, corrections humaines, contrôles MDP, taux de rejet et distribution des actions métier.
+            </p>
+        </div>
         <div style="display:grid; grid-template-columns:repeat(6, minmax(130px, 1fr)); gap:12px; margin-bottom:14px;">
             <div style="background:#ffffff; border:1px solid #e5e7eb; border-radius:8px; padding:14px;">
                 <p style="margin:0; color:#64748b; font-size:12px;">Images analysées</p>
@@ -564,6 +573,24 @@ def build_dashboard():
         ])
 
     return kpi_html, distribution_html, recent_rows
+
+
+def load_module_d_markdown():
+    path = Path(MODULE_D_MD_PATH)
+    if path.exists():
+        return path.read_text(encoding="utf-8")
+    return """
+# Module D - Analyse ethique et sociale
+
+Le document Module D est attendu dans `docs/module_d_ethique.md`.
+
+Points suivis dans l'application :
+
+- emploi et supervision humaine ;
+- biais dataset et audit des lots ;
+- gouvernance des erreurs ;
+- tracabilite par journal qualite, feedback humain et decisions MDP.
+"""
 
 # -------------------------------
 # Interface Gradio Logic
@@ -738,6 +765,9 @@ with gr.Blocks(title="BananaVision Enterprise") as demo:
                 wrap=True,
                 label="Dernières analyses",
             )
+
+        with gr.Tab("Module D - Éthique"):
+            gr.Markdown(load_module_d_markdown())
 
     analyze_btn.click(
         fn=process_and_validate,
