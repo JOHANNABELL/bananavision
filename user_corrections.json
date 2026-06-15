@@ -1,0 +1,10 @@
+[
+  {
+    "timestamp": "2026-06-15T18:50:56.539418",
+    "predicted_binary": "bananes_export",
+    "predicted_multiclass": "mure",
+    "user_feedback": "invalid",
+    "correct_binary": "bananes_rejetees",
+    "correct_multiclass": "mure"
+  }
+]
