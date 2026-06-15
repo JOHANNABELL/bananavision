@@ -6,11 +6,9 @@ dataset/
 *.pth
 *.jpg
 *.png
-*.ipynb
 clusters.npy
 embeddings*
 labels*
-class_names*.json
 kmeans_selection.png
 pca_embeddings.png
 __pycache__/
